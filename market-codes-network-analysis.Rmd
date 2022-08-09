@@ -1,0 +1,162 @@
+---
+title: "Showing Relationships between CSDs using Network Analysis in R"
+output: html_notebook
+---
+
+# Introduction
+
+Showing relationships between different market Code Subsidiary Documents (CSDs) and how they reference each other. 
+
+
+```{r}
+
+library(pdftools)
+library(tidyverse)
+library(stringr)
+library(igraph)
+library(networkD3)
+library(htmlwidgets)
+library(arcdiagram)
+
+```
+
+
+Converting PDFs to text files using pdftools. 
+
+```{r}
+
+csd_docs <- list.files("documents", pattern = "CSD")
+
+csd_text <- list()
+
+for (csd in csd_docs) {
+  csd_url <- paste0(getwd(), "/documents/", csd)
+  temp <- paste(pdf_text(csd_url), collapse = " ")
+  csd_text <- append(csd_text, temp)
+}
+
+csd_list <- str_sub(csd_docs, 1, 8)
+
+```
+
+
+Counting references to CSDs in each document. 
+
+
+```{r}
+
+csd_count_df <- NULL
+
+for (i in 1:length(csd_list)) {
+  
+  temp_df <- data.frame(
+    CsdRef = csd_list[i],
+    CsdEntity = csd_list,
+    CsdCount = str_count(csd_text[i], csd_list)
+  )
+  
+  csd_count_df <- rbind(csd_count_df, temp_df)
+  
+}
+    
+csd_network <- csd_count_df %>% 
+  mutate(SelfReference = CsdRef == CsdEntity) %>% 
+  filter(CsdCount > 0, !SelfReference) %>% 
+  select(-SelfReference)
+
+head(csd_network)
+
+```
+
+
+From this we see that of the `r NROW(csd_list)` documents
+
+Showing the counts
+
+
+```{r}
+
+plot1 <- csd_network %>% 
+  group_by(CsdEntity) %>% 
+  summarise(CsdCount = sum(CsdCount)) %>% 
+  ggplot() + 
+  geom_col(aes(reorder(CsdEntity, -CsdCount), CsdCount)) + 
+  coord_flip()
+
+plot2 <- csd_network %>% 
+  ggplot() + 
+  geom_bar(aes(fct_infreq(CsdEntity))) + 
+  coord_flip()
+
+combined_plots <- gridExtra::arrangeGrob(plot1, plot2, ncol = 2)
+
+plot(combined_plots)
+
+```
+
+
+Exploring different ways of visualising the relationships using network graphs and different layouts
+
+
+```{r}
+
+csd_network_graph <- csd_network %>% 
+  graph_from_data_frame(directed = FALSE) 
+
+csd_network_graph %>% 
+  plot(
+    layout = layout.random, 
+    main = "random"
+  )
+
+csd_network_graph %>% 
+  plot(
+    layout = layout.circle, 
+    main = "circle"
+  )
+
+csd_network_graph %>% 
+  plot(
+    vertex.size = degree(graph_from_data_frame(csd_network), mode = "all"), 
+    layout = layout.fruchterman.reingold, 
+    main = "fruchterman.reingold"
+    )
+
+
+```
+
+Individual sta diagrams
+
+```{r}
+
+csd_network_graph %>% 
+  #filter(CsdRef == "CSD 0301") %>% 
+  graph.star()
+
+
+```
+
+
+
+
+Arch diagram
+
+```{r}
+
+csd_edges <- get.edgelist(csd_network_graph)
+
+arcplot(csd_edges, sorted = TRUE, decreasing = TRUE, las = 2)
+
+```
+
+
+
+```{r}
+
+csd_degree <- degree(csd_network_graph)
+
+arcplot(csd_edges, cex.nodes = csd_degree / 10, show.nodes = TRUE)
+
+
+```
+

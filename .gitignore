@@ -1,0 +1,9 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.text
+*.csv
+*.html
+documents/*
+lapplyidea.R
